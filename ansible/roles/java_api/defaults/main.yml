@@ -1,0 +1,11 @@
+---
+# Everything here can be overridden with -e on the command line (the workflow does that per environment)
+java_api_app_name: contract-api-dev
+java_api_app_port: 8080
+java_api_app_version: "0.0.0-local"
+java_api_app_user: contractapi
+java_api_app_base_dir: "/opt/{{ java_api_app_name }}"
+java_api_jar_src: ../java-api/target/contract-specs-api.jar
+java_api_java_package: openjdk-21-jre-headless
+java_api_java_heap: "-Xms64m -Xmx256m"   # the free VM only has 1 GiB of RAM
+java_api_releases_to_keep: 3

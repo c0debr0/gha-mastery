@@ -1,0 +1,38 @@
+# Day 2 · Lab 3 — a composite action: one reusable "step" made of several steps
+name: HTTP health check
+description: Polls a URL until it returns HTTP 200 or the attempts run out.
+inputs:
+  url:
+    description: URL to poll
+    required: true
+  attempts:
+    description: How many tries
+    default: "10"
+  delay-seconds:
+    description: Seconds between tries
+    default: "5"
+outputs:
+  body:
+    description: Response body of the successful call
+    value: ${{ steps.poll.outputs.body }}
+runs:
+  using: composite
+  steps:
+    - id: poll
+      shell: bash
+      env:
+        URL: ${{ inputs.url }}
+        ATTEMPTS: ${{ inputs.attempts }}
+        DELAY: ${{ inputs.delay-seconds }}
+      run: |
+        for i in $(seq 1 "$ATTEMPTS"); do
+          if BODY=$(curl -fsS --max-time 5 "$URL"); then
+            echo "Healthy on attempt $i: $BODY"
+            echo "body=$BODY" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Attempt $i/$ATTEMPTS failed; sleeping ${DELAY}s"
+          sleep "$DELAY"
+        done
+        echo "::error::$URL never became healthy"
+        exit 1

@@ -1,0 +1,42 @@
+# Day 1 · Lab 1 — your first robot recipe
+name: Day 1 - Hello Actions
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      greeting:
+        description: Who should the robot greet?
+        default: JE
+        type: string
+
+jobs:
+  say-hello:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Greet
+        run: echo "Hello ${{ inputs.greeting || 'from a push' }}!"
+
+      - name: Show a few contexts
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
+        run: |
+          echo "Event:  $EVENT"
+          echo "Actor:  $ACTOR"
+          echo "Commit: $SHA"
+          echo "Runner OS: $RUNNER_OS"
+
+      - name: Write to the run summary
+        run: |
+          echo "### Hello from run ${{ github.run_number }} :wave:" >> "$GITHUB_STEP_SUMMARY"
+
+  on-windows:
+    needs: say-hello
+    runs-on: windows-latest
+    steps:
+      - name: Same idea, PowerShell this time
+        shell: pwsh
+        run: Write-Host "PowerShell $($PSVersionTable.PSVersion) on $env:RUNNER_OS"

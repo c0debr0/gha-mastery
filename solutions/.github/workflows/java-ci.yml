@@ -1,0 +1,60 @@
+# Day 1 · Lab 2 — Continuous Integration for the Maven project
+name: Java CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["java-api/**", ".github/workflows/java-ci.yml", ".github/workflows/_maven-build.yml"]
+  pull_request:
+    paths: ["java-api/**", ".github/workflows/java-ci.yml", ".github/workflows/_maven-build.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: java-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-matrix:
+    name: Test (JDK ${{ matrix.java }} · ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        java: ["21", "25"]
+        include:
+          - os: windows-latest
+            java: "21"
+    defaults:
+      run:
+        working-directory: java-api
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+          cache-dependency-path: java-api/pom.xml
+
+      - name: Build and test
+        run: mvn -B -ntp verify
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: surefire-reports-${{ matrix.os }}-jdk${{ matrix.java }}
+          path: java-api/target/surefire-reports/
+          retention-days: 7
+
+  # Day 2 · Lab 2 — the same build, called as a reusable workflow
+  package:
+    needs: test-matrix
+    uses: ./.github/workflows/_maven-build.yml
+    with:
+      java-version: "21"

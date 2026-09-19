@@ -1,0 +1,8 @@
+---
+# Day 3 · Lab 1/2 — install Java, drop the jar, run it as a systemd service, prove it is healthy
+- name: Deploy the Contract Specs API
+  hosts: all
+  become: true
+  gather_facts: true
+  roles:
+    - role: java_api

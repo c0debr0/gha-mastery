@@ -1,0 +1,70 @@
+# Day 3 · Stretch — Ansible installs a released WinForms build on a Windows VM over SSH
+name: Stretch - WinForms to Windows VM
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to install (e.g. v1.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      RULE_NAME: gha-${{ github.run_id }}-win
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the release zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "${{ inputs.tag }}" --repo "$GITHUB_REPOSITORY" --pattern "PositionSizer-*.zip" --dir dist
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Open SSH for this runner
+        run: |
+          RUNNER_IP=$(curl -fsS https://api.ipify.org)
+          az network nsg rule create -g "${{ vars.AZURE_RG }}" --nsg-name "${{ vars.WIN_VM_NAME }}NSG" \
+            -n "$RULE_NAME" --priority $((200 + RANDOM % 700)) --direction Inbound --access Allow \
+            --protocol Tcp --source-address-prefixes "$RUNNER_IP/32" --destination-port-ranges 22 -o none
+
+      - name: Install SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ vars.WIN_VM_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Install Ansible + Windows collection
+        run: |
+          pipx install ansible-core
+          ansible-galaxy collection install ansible.windows
+
+      - name: Run the Windows playbook
+        working-directory: ansible
+        run: >
+          ansible-playbook playbooks/deploy-winforms-windows.yml
+          -i "${{ vars.WIN_VM_HOST }},"
+          -u azureuser
+          -e ansible_connection=ssh -e ansible_shell_type=powershell
+          -e "zip_src=$(ls ${{ github.workspace }}/dist/PositionSizer-*.zip)"
+          -e "app_version=${TAG#v}"
+        env:
+          TAG: ${{ inputs.tag }}
+
+      - name: Close SSH
+        if: always()
+        run: az network nsg rule delete -g "${{ vars.AZURE_RG }}" --nsg-name "${{ vars.WIN_VM_NAME }}NSG" -n "$RULE_NAME" || true

@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Contract Specs API ({{ java_api_app_name }})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User={{ java_api_app_user }}
+Group={{ java_api_app_user }}
+Environment=PORT={{ java_api_app_port }}
+ExecStart=/usr/bin/java {{ java_api_java_heap }} -jar {{ java_api_app_base_dir }}/current.jar
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

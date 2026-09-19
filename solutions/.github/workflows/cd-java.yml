@@ -1,0 +1,34 @@
+# Day 3 · Lab 2/3 — Continuous Delivery: build once, deploy to dev, approve, deploy to production
+name: Java CD
+
+on:
+  push:
+    branches: [main]
+    paths: ["java-api/**", "ansible/**", ".github/workflows/cd-java.yml", ".github/workflows/_ansible-deploy.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    uses: ./.github/workflows/_maven-build.yml
+
+  deploy-dev:
+    needs: build
+    uses: ./.github/workflows/_ansible-deploy.yml
+    with:
+      environment: dev
+      artifact-name: ${{ needs.build.outputs.artifact-name }}
+      version: ${{ needs.build.outputs.version }}
+    secrets: inherit
+
+  deploy-production:
+    needs: [build, deploy-dev]
+    uses: ./.github/workflows/_ansible-deploy.yml
+    with:
+      environment: production
+      artifact-name: ${{ needs.build.outputs.artifact-name }}
+      version: ${{ needs.build.outputs.version }}
+    secrets: inherit
