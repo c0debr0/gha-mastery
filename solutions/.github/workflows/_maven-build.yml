@@ -1,0 +1,56 @@
+# Day 2 · Lab 2 — reusable workflow: build the jar once, hand it to anyone who calls
+name: Reusable - Maven package
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        type: string
+        default: "21"
+      version:
+        description: Leave empty to use 1.0.<run number>
+        type: string
+        default: ""
+    outputs:
+      version:
+        description: Version stamped into the jar
+        value: ${{ jobs.package.outputs.version }}
+      artifact-name:
+        description: Name of the uploaded artifact
+        value: ${{ jobs.package.outputs.artifact-name }}
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      artifact-name: ${{ steps.meta.outputs.artifact-name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+          cache: maven
+          cache-dependency-path: java-api/pom.xml
+
+      - name: Work out the version
+        id: meta
+        run: |
+          VERSION="${{ inputs.version || format('1.0.{0}', github.run_number) }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "artifact-name=contract-specs-api-$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Package (tests already ran in CI)
+        working-directory: java-api
+        run: mvn -B -ntp package -DskipTests -Drevision=${{ steps.meta.outputs.version }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.meta.outputs.artifact-name }}
+          path: java-api/target/contract-specs-api.jar
+          if-no-files-found: error

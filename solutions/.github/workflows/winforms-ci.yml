@@ -1,0 +1,23 @@
+# Day 2 · Lab 1 — CI for the C# Windows Forms app
+name: WinForms CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["winforms-app/**", ".github/workflows/winforms-ci.yml", ".github/workflows/_winforms-build.yml"]
+  pull_request:
+    paths: ["winforms-app/**", ".github/workflows/winforms-ci.yml", ".github/workflows/_winforms-build.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: winforms-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/_winforms-build.yml
+    with:
+      version: 1.0.${{ github.run_number }}

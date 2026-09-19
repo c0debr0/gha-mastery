@@ -1,0 +1,47 @@
+---
+# Day 3 · Stretch — install a WinForms release on a Windows VM (Ansible over SSH)
+- name: Install Position Sizer on Windows
+  hosts: all
+  gather_facts: false
+  vars:
+    install_root: 'C:\Apps\PositionSizer'
+    zip_src: ""            # passed in by the workflow
+    app_version: "0.0.0"
+  tasks:
+    - name: Create the install folder
+      ansible.windows.win_file:
+        path: '{{ install_root }}\{{ app_version }}'
+        state: directory
+
+    - name: Copy the zip to the VM
+      ansible.windows.win_copy:
+        src: "{{ zip_src }}"
+        dest: '{{ install_root }}\PositionSizer-{{ app_version }}.zip'
+
+    - name: Unzip into a versioned folder
+      ansible.windows.win_powershell:
+        script: |
+          param($Zip, $Dest)
+          if (Test-Path "$Dest\PositionSizer.App.exe") { $Ansible.Changed = $false; return }
+          Expand-Archive -Path $Zip -DestinationPath $Dest -Force
+        parameters:
+          Zip: '{{ install_root }}\PositionSizer-{{ app_version }}.zip'
+          Dest: '{{ install_root }}\{{ app_version }}'
+
+    - name: Point the 'current' junction at this version
+      ansible.windows.win_powershell:
+        script: |
+          param($Root, $Version)
+          $link = Join-Path $Root 'current'
+          $target = Join-Path $Root $Version
+          if ((Test-Path $link) -and ((Get-Item $link).Target -eq $target)) { $Ansible.Changed = $false; return }
+          if (Test-Path $link) { (Get-Item $link).Delete() }
+          New-Item -ItemType Junction -Path $link -Target $target | Out-Null
+        parameters:
+          Root: "{{ install_root }}"
+          Version: "{{ app_version }}"
+
+    - name: Record the installed version
+      ansible.windows.win_copy:
+        content: "{{ app_version }}"
+        dest: '{{ install_root }}\VERSION.txt'

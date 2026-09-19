@@ -1,0 +1,100 @@
+# Day 3 · Lab 2 — reusable deploy: GitHub runner -> Azure VM, driven by Ansible
+name: Reusable - Ansible deploy to Azure VM
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment (dev or production)
+        type: string
+        required: true
+      artifact-name:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: http://${{ vars.VM_HOST }}:${{ vars.APP_PORT }}/health
+    permissions:
+      id-token: write   # lets azure/login swap a GitHub OIDC token for an Azure token
+      contents: read
+    concurrency:
+      group: vm-deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      RULE_NAME: gha-${{ github.run_id }}-${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the jar built earlier
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: dist
+
+      - name: Log in to Azure (OIDC, no stored password)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Open SSH on the VM for this runner's IP only
+        run: |
+          RUNNER_IP=$(curl -fsS https://api.ipify.org)
+          echo "::add-mask::$RUNNER_IP"
+          az network nsg rule create \
+            --resource-group "${{ vars.AZURE_RG }}" \
+            --nsg-name "${{ vars.VM_NAME }}NSG" \
+            --name "$RULE_NAME" \
+            --priority $((200 + RANDOM % 700)) \
+            --direction Inbound --access Allow --protocol Tcp \
+            --source-address-prefixes "$RUNNER_IP/32" \
+            --destination-port-ranges 22 \
+            --output none
+
+      - name: Install SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          for i in 1 2 3 4 5; do
+            ssh-keyscan -H "${{ vars.VM_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null && break
+            sleep 5
+          done
+
+      - name: Install Ansible
+        run: pipx install ansible-core
+
+      - name: Run the playbook
+        working-directory: ansible
+        run: >
+          ansible-playbook playbooks/deploy-java-api.yml
+          -i "${{ vars.VM_HOST }},"
+          -u azureuser
+          -e "java_api_jar_src=${{ github.workspace }}/dist/contract-specs-api.jar"
+          -e "java_api_app_version=${{ inputs.version }}"
+          -e "java_api_app_name=${{ vars.APP_NAME }}"
+          -e "java_api_app_port=${{ vars.APP_PORT }}"
+
+      - name: Smoke test from the outside
+        uses: ./.github/actions/health-check
+        with:
+          url: http://${{ vars.VM_HOST }}:${{ vars.APP_PORT }}/health
+
+      - name: Close the SSH hole again
+        if: always()
+        run: |
+          az network nsg rule delete \
+            --resource-group "${{ vars.AZURE_RG }}" \
+            --nsg-name "${{ vars.VM_NAME }}NSG" \
+            --name "$RULE_NAME" || true
