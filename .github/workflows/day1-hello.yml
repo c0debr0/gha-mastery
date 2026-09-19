@@ -30,6 +30,14 @@ jobs:
                 echo "SHA: $SHA"
                 echo "Runner OS:  $RUNNER_OS"
 
+            - name: Show runner name and IP
+              run: |
+                echo "Runner name: $(hostname)"
+                echo "Runner IP: $(curl -s https://api.ipify.org)"
+                . /etc/os-release
+                echo "OS: $PRETTY_NAME"
+                echo "Kernel version: $(uname -r)"
+
             - name: Write to the run summary
               run: |
                 echo "Hello from run ${{ github.run_number }} :wave:" >> $GITHUB_STEP_SUMMARY
@@ -41,3 +49,12 @@ jobs:
             - name: Same diea, Powershell this time
               shell: pwsh
               run: 'Write-Host "Powershell: $($PSVersionTable.PSVersion) on $env:RUNNER_OS!"'
+
+            - name: Show runner name and IP
+              shell: pwsh
+              run: |
+                Write-Host "Runner name: $env:COMPUTERNAME"
+                Write-Host "Runner IP: $(Invoke-RestMethod https://api.ipify.org)"
+                $os = Get-CimInstance Win32_OperatingSystem
+                Write-Host "OS: $($os.Caption)"
+                Write-Host "OS version: $($os.Version)"
