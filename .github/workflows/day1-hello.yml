@@ -40,4 +40,4 @@ jobs:
         steps:
             - name: Same diea, Powershell this time
               shell: pwsh
-              run: Write-Host "Powershell: $($PSVersionTable.PSVersion) on $env:RUNNER_OS!"
+              run: 'Write-Host "Powershell: $($PSVersionTable.PSVersion) on $env:RUNNER_OS!"'
