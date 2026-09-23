@@ -52,9 +52,4 @@ jobs:
           path: java-api/target/surefire-reports/
           retention-days: 7
 
-  # Day 2 · Lab 2 — the same build, called as a reusable workflow
-  package:
-    needs: test-matrix
-    uses: ./.github/workflows/_maven-build.yml
-    with:
-      java-version: "21"
+
